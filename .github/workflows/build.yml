@@ -30,6 +30,19 @@ jobs:
             throw 'A version tag such as v1.2.3 is required.'
           }
 
+      - name: Check private upload service
+        shell: pwsh
+        env:
+          UPLOAD_BASE: ${{ secrets.RELEASEHUB_BASE_URL }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $url = $env:UPLOAD_BASE.TrimEnd('/') + '/healthz'
+          & curl.exe --silent --fail --connect-timeout 10 --max-time 20 `
+            --output "$env:RUNNER_TEMP/upload-health.json" $url 2> "$env:RUNNER_TEMP/upload-health.log"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Private upload service is unreachable (curl exit $LASTEXITCODE)."
+          }
+
       - name: Checkout private source with read-only deploy key
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
