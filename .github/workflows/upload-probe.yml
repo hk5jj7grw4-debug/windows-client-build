@@ -34,8 +34,7 @@ jobs:
             }
           }
           '@
-            $data = [byte[]]::new(1MB)
-            [Security.Cryptography.RandomNumberGenerator]::Fill($data)
+            $data = [Security.Cryptography.RandomNumberGenerator]::GetBytes(1MB)
             $file = Join-Path $env:RUNNER_TEMP 'synthetic-upload.bin'
             [IO.File]::WriteAllBytes($file, $data)
             $sha = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($data)).ToLowerInvariant()
