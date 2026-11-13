@@ -18,8 +18,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: windows-latest
-    timeout-minutes: 25
+    runs-on: windows-2022
+    timeout-minutes: 65
     steps:
       - name: Validate source tag
         shell: pwsh
