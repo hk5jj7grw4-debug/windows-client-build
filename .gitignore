@@ -1,0 +1,12 @@
+# This repository stores automation only.
+private-source/
+artifacts/
+*.zip
+*.exe
+*.dll
+*.pdb
+*.log
+*.pem
+*.key
+*.secret.*
+.DS_Store

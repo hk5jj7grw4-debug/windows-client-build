@@ -1,0 +1,81 @@
+name: Build Windows Client
+run-name: Windows client ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Private source release tag (v<major>.<minor>.<patch>)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-stable-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Validate source tag
+        shell: pwsh
+        env:
+          SOURCE_TAG: ${{ inputs.tag }}
+        run: |
+          if ($env:SOURCE_TAG -cnotmatch '^v\d+\.\d+\.\d+$') {
+            throw 'A version tag such as v1.2.3 is required.'
+          }
+
+      - name: Checkout private source with read-only deploy key
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ secrets.SOURCE_REPOSITORY }}
+          ref: ${{ inputs.tag }}
+          ssh-key: ${{ secrets.SOURCE_READ_KEY }}
+          path: private-source
+          persist-credentials: false
+          fetch-depth: 1
+          show-progress: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build and upload privately
+        shell: pwsh
+        env:
+          SOURCE_TAG: ${{ inputs.tag }}
+          RELEASEHUB_APP_TOKEN: ${{ secrets.RELEASEHUB_APP_TOKEN }}
+          RELEASEHUB_ROBOT_MANAGER_TOKEN: ${{ secrets.RELEASEHUB_ROBOT_MANAGER_TOKEN }}
+          RELEASEHUB_CI_TOKEN: ${{ secrets.RELEASEHUB_CI_TOKEN }}
+          RELEASEHUB_BASE_URL: ${{ secrets.RELEASEHUB_BASE_URL }}
+        run: |
+          try {
+            & "$env:GITHUB_WORKSPACE/private-source/scripts/Publish-ReleaseHub.ps1" -Tag $env:SOURCE_TAG
+          }
+          catch {
+            $message = $_.Exception.Message
+            if ($message -match '^(Restore|Publish|Installer|InstallNSIS) failed \(exit (-?\d+)(?:; codes: ([A-Z0-9, ]+))?\)') {
+              Write-Host "::error::$($Matches[1]) failed; exit $($Matches[2]); diagnostic codes: $($Matches[3])"
+            } elseif ($message -match '^ReleaseHub (installer|portable) upload failed \(curl exit (\d+)\)\.$') {
+              Write-Host "::error::ReleaseHub $($Matches[1]) upload failed; curl exit $($Matches[2])."
+            } else {
+              Write-Host '::error::Build or upload failed. Private exception details were not published.'
+            }
+            exit 1
+          }
+
+      - name: Remove private workspace and temporary build logs
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($path in @("$env:GITHUB_WORKSPACE/private-source", "$env:RUNNER_TEMP/client-build-private")) {
+            if (Test-Path -LiteralPath $path) {
+              Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
